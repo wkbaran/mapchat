@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Chat Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        #map-container {
+            flex: 1;
+            margin-right: 20px;
+            min-height: 400px;
+        }
+
+        #map {
+            height: 100%;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        #chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #chat-messages {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+        }
+
+        .assistant-message {
+            background-color: #f5f5f5;
+        }
+
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+<div id="map-container">
+    <div id="map"></div>
+</div>
+<div id="chat-container">
+    <div id="chat-messages"></div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    let map;
+    let markers = [];
+    let conversationHistory = [
+        {
+            role: "system",
+            content: "You are a helpful assistant that can provide information about locations and place markers on a map. You can use the centerMap and addMarker functions to interact with the map. When asked about a location, you should generally both describe it and mark it on the map."
+        }
+    ];
+
+    let markerElements;
+
+    // Initialize Google Maps
+    async function initMap() {
+        try {
+            // Create the map
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 0, lng: 0 },
+                zoom: 2,
+                mapId: '8f1199be7806649e'
+            });
+
+            // Load the marker library
+            const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+            markerElements = AdvancedMarkerElement
+
+            console.log("Map and marker library initialized successfully");
+        } catch (error) {
+            console.error("Error initializing map:", error);
+        }
+    }
+
+    // Function to center map on location
+    function centerMap(latitude, longitude) {
+        const position = { lat: parseFloat(latitude), lng: parseFloat(longitude) };
+        map.setCenter(position);
+        map.setZoom(12);
+        return `Map centered on coordinates: ${latitude}, ${longitude}`;
+    }
+
+    // Function to
+
+    // Function to add marker
+    function addMarker(latitude, longitude, title = 'Marker') {
+        try {
+            const position = { lat: parseFloat(latitude), lng: parseFloat(longitude) };
+
+            // Create and add the marker
+            const marker = new markerElements({
+                map: map,
+                position: position,
+                title: title
+            });
+
+            markers.push(marker);
+
+            return `Marker added at coordinates: ${latitude}, ${longitude} with title: ${title}`;
+        } catch (error) {
+            console.error("Error adding marker:", error);
+            return "Error adding marker to the map";
+        }
+    }
+
+    // Available functions for the AI to use
+    const availableFunctions = [
+        {
+            type: 'function',
+            function: {
+                name: 'centerMap',
+                description: 'Center the map on specific coordinates',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        latitude: {
+                            type: 'number',
+                            description: 'Latitude coordinate'
+                        },
+                        longitude: {
+                            type: 'number',
+                            description: 'Longitude coordinate'
+                        }
+                    },
+                    required: ['latitude', 'longitude']
+                }
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'addMarker',
+                description: 'Add a marker to the map at specific coordinates',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        latitude: {
+                            type: 'number',
+                            description: 'Latitude coordinate'
+                        },
+                        longitude: {
+                            type: 'number',
+                            description: 'Longitude coordinate'
+                        },
+                        title: {
+                            type: 'string',
+                            description: 'Title for the marker'
+                        }
+                    },
+                    required: ['latitude', 'longitude']
+                }
+            }
+        }
+    ];
+
+    // Add message to chat and history
+    function addMessage(message, isUser) {
+        // Add to UI
+        const chatMessages = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+        messageDiv.textContent = message;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Add to conversation history
+        if (isUser) {
+            conversationHistory.push({
+                role: "user",
+                content: message
+            });
+        } else {
+            conversationHistory.push({
+                role: "assistant",
+                content: message
+            });
+        }
+    }
+
+    // Send message to OpenAI API through our proxy
+    async function sendMessage() {
+        const userInput = document.getElementById('user-input');
+        const message = userInput.value.trim();
+
+        if (!message) return;
+
+        addMessage(message, true);
+        userInput.value = '';
+
+        try {
+            const response = await fetch('http://localhost:3000/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: conversationHistory,
+                    tools: availableFunctions
+                    // functions: Object.values(availableFunctions),
+                    // function_call: 'auto'  // Can also use "none" or "auto"
+                })
+            });
+
+            const data = await response.json();
+            console.log("Response: "+JSON.stringify(data,null,2));
+            const assistantMessage = data.choices[0].message;
+
+            // First, add the assistant's text response if there is one
+            if (assistantMessage.content) {
+                addMessage(assistantMessage.content, false);
+            }
+
+            // Handle potential multiple function calls
+            if (assistantMessage.function_call || assistantMessage.tool_calls) {
+                // Handle legacy single function call format
+                if (assistantMessage.function_call) {
+                    const functionCall = assistantMessage.function_call;
+                    const args = JSON.parse(functionCall.arguments);
+
+                    let result;
+                    if (functionCall.name === 'centerMap') {
+                        result = centerMap(args.latitude, args.longitude);
+                    } else if (functionCall.name === 'addMarker') {
+                        result = addMarker(args.latitude, args.longitude, args.title);
+                    }
+
+                    // Add function call to history
+                    conversationHistory.push({
+                        role: "assistant",
+                        function_call: functionCall
+                    });
+
+                    // Add function result to history
+                    conversationHistory.push({
+                        role: "function",
+                        name: functionCall.name,
+                        content: result
+                    });
+
+                    addMessage(`Function result: ${result}`, false);
+                }
+                // Handle parallel function calls format
+                else if (assistantMessage.tool_calls) {
+                    for (const toolCall of assistantMessage.tool_calls) {
+                        const args = JSON.parse(toolCall.function.arguments);
+
+                        let result;
+                        if (toolCall.function.name === 'centerMap') {
+                            result = centerMap(args.latitude, args.longitude);
+                        } else if (toolCall.function.name === 'addMarker') {
+                            result = addMarker(args.latitude, args.longitude, args.title);
+                        }
+
+                        // Add function call to history
+                        conversationHistory.push({
+                            role: "assistant",
+                            tool_calls: [toolCall]
+                        });
+
+                        // Add function result to history
+                        conversationHistory.push({
+                            role: "tool",
+                            tool_call_id: toolCall.id,
+                            content: result
+                        });
+
+                        addMessage(`Function result: ${result}`, false);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            addMessage('Sorry, there was an error processing your request.', false);
+        }
+    }
+
+    // Handle Enter key in input
+    document.getElementById('user-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+</script>
+
+<!-- Load Google Maps JavaScript API -->
+<script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDA6ruMtNs-mkKhFHuKivJVrWeidFTk7lQ&callback=initMap&libraries=marker&v=weekly">
+</script>
+</body>
+</html>
