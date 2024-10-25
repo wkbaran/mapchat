@@ -183,6 +183,14 @@
         }
     }
 
+    function clearMarkers () {
+        markers.forEach ((m) => {
+            m.setMap(null);
+        })
+        markers = [];
+        return "All markers cleared";
+    }
+
     // Available functions for the AI to use
     const availableFunctions = [
         {
@@ -229,6 +237,17 @@
                     },
                     required: ['latitude', 'longitude']
                 }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'clearMarkers',
+                description: 'Clear all existing markers',
+                // parameters: {
+                //     type: 'object',
+                //     properties: {}
+                // }
             }
         }
     ];
@@ -319,6 +338,8 @@
                         result = centerMap(args.latitude, args.longitude);
                     } else if (toolCall.function.name === 'addMarker') {
                         result = addMarker(args.latitude, args.longitude, args.title);
+                    } else if (toolCall.function.name === 'clearMarkers') {
+                        result = clearMarkers();
                     }
 
                     // Add function result to history
@@ -332,32 +353,28 @@
                 }
 
                 // Now query the service again to see if it has a reply to function call results
-                try {
-                    let body = {
-                        model: 'gpt-4o-mini',
-                        messages: conversationHistory,
-                        tools: availableFunctions
-                    }
-                    console.log("Sending body: "+JSON.stringify(body,null,2));
-                    const response = await fetch('http://localhost:3000/api/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(body)
-                    });
+                let body = {
+                    model: 'gpt-4o-mini',
+                    messages: conversationHistory,
+                    tools: availableFunctions
+                }
+                console.log('Sending body: '+JSON.stringify(body,null,2));
+                const response = await fetch('http://localhost:3000/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
 
-                    const data = await response.json();
-                    console.log("Response: "+JSON.stringify(data,null,2));
-                    const assistantMessage = data.choices[0].message;
+                const data = await response.json();
+                // TODO: Test for data.error and handle gracefully
+                console.log("Response: "+JSON.stringify(data,null,2));
+                assistantMessage = data.choices[0].message;
 
-                    // First, add the assistant's text response if there is one
-                    if (assistantMessage.content) {
-                        addMessage(assistantMessage.content, false);
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    addMessage('Sorry, there was an error processing your request.', false);
+                // First, add the assistant's text response if there is one
+                if (assistantMessage.content) {
+                    addMessage(assistantMessage.content, false);
                 }
             }
         } catch (error) {
