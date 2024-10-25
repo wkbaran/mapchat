@@ -22,7 +22,6 @@ node server.js
 ## Other To-Dos
 - Add marker colors, icons
 - After placing a set of markers, make sure viewport will include them all
-- Make target host a parameter
 - Routes, paths
 - Navigation? Distance?
 
